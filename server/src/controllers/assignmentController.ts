@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { Assignment } from '../models/Assignment';
 import { GeneratedPaper } from '../models/GeneratedPaper';
 import { addGenerationJob } from '../queues/generationQueue';
+import { generateQuestionPaper } from '../services/aiService';
+import { generatePDF } from '../services/pdfService';
 import path from 'path';
 import fs from 'fs';
 
@@ -24,9 +26,53 @@ export const createAssignment = async (req: Request, res: Response) => {
 
     await assignment.save();
 
-    await addGenerationJob(assignment._id.toString());
+    if (process.env.VERCEL) {
+      // Synchronous generation for Vercel Serverless
+      console.log(`[Vercel] Starting synchronous generation for: ${assignment._id}`);
+      
+      try {
+        // AI Generation
+        const generatedData = await generateQuestionPaper(assignment);
 
-    res.status(201).json({ message: 'Assignment created and generation queued', assignmentId: assignment._id });
+        // PDF Path
+        const pdfDir = path.resolve(process.cwd(), 'uploads/pdfs');
+        if (!fs.existsSync(pdfDir)) {
+          fs.mkdirSync(pdfDir, { recursive: true });
+        }
+        const pdfFilename = `assignment_${assignment._id}_${Date.now()}.pdf`;
+        const pdfPath = path.join(pdfDir, pdfFilename);
+
+        // PDF Generation
+        await generatePDF(assignment, pdfPath);
+
+        // Save Paper
+        const paper = new GeneratedPaper({
+          assignmentId: assignment._id,
+          title: generatedData.title,
+          class: generatedData.class,
+          subject: generatedData.subject,
+          sections: generatedData.sections,
+          generatedContent: generatedData,
+          pdfUrl: `/uploads/pdfs/${pdfFilename}`
+        });
+        await paper.save();
+
+        // Update Assignment
+        assignment.status = 'completed';
+        await assignment.save();
+        
+        console.log(`[Vercel] Sync generation successful for: ${assignment._id}`);
+      } catch (genError) {
+        console.error(`[Vercel] Sync generation failed:`, genError);
+        assignment.status = 'failed';
+        await assignment.save();
+      }
+    } else {
+      // Async generation for local/dedicated servers
+      await addGenerationJob(assignment._id.toString());
+    }
+
+    res.status(201).json({ message: 'Assignment created', assignmentId: assignment._id });
   } catch (error) {
     console.error('Create Assignment Error:', error);
     res.status(500).json({ error: 'Server error creating assignment' });
@@ -82,13 +128,8 @@ export const downloadPDF = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'PDF not found' });
     }
 
-    // Path logic: paper.pdfUrl is '/uploads/pdfs/file.pdf'
-    // process.cwd() is 'C:/.../server'
-    // Result: 'C:/.../server/uploads/pdfs/file.pdf'
     const fullPath = path.join(process.cwd(), paper.pdfUrl);
     
-    console.log(`[Download] Attempting to send file: ${fullPath}`);
-
     if (!fs.existsSync(fullPath)) {
       console.error(`[Download] File does not exist on disk: ${fullPath}`);
       return res.status(404).json({ error: 'PDF file missing on server' });
@@ -103,8 +144,6 @@ export const downloadPDF = async (req: Request, res: Response) => {
         if (!res.headersSent) {
           res.status(500).send('Error downloading file');
         }
-      } else {
-        console.log(`[Download] Successfully sent file: ${fullPath}`);
       }
     });
   } catch (error) {

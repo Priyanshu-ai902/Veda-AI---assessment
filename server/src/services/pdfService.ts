@@ -1,4 +1,6 @@
+import puppeteerCore from 'puppeteer-core';
 import puppeteer from 'puppeteer';
+import fs from 'fs';
 
 export const generatePDF = async (paperData: any, outputPath: string): Promise<string> => {
   const assignmentId = paperData.assignmentId || paperData._id;
@@ -7,11 +9,25 @@ export const generatePDF = async (paperData: any, outputPath: string): Promise<s
   const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
   const realPageUrl = `${clientUrl}/assignments/output?id=${assignmentId}`;
   
-  const browser = await puppeteer.launch({
-    headless: true,
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-  });
+  let browser;
+  
+  if (process.env.VERCEL) {
+    // Vercel serverless environment
+    const chromium = require('@sparticuz/chromium');
+    browser = await puppeteerCore.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+    });
+  } else {
+    // Local environment
+    browser = await puppeteer.launch({
+      headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    });
+  }
 
   try {
     const page = await browser.newPage();
@@ -43,7 +59,7 @@ export const generatePDF = async (paperData: any, outputPath: string): Promise<s
       printBackground: true,
       preferCSSPageSize: true,
       margin: {
-        top: '0px', // Handled by CSS @media print
+        top: '0px',
         bottom: '0px',
         left: '0px',
         right: '0px'
