@@ -9,38 +9,82 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AssignmentsRouteImport } from './routes/assignments'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AssignmentsOutputRouteImport } from './routes/assignments.output'
+import { Route as AssignmentsCreateRouteImport } from './routes/assignments.create'
 
+const AssignmentsRoute = AssignmentsRouteImport.update({
+  id: '/assignments',
+  path: '/assignments',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AssignmentsOutputRoute = AssignmentsOutputRouteImport.update({
+  id: '/output',
+  path: '/output',
+  getParentRoute: () => AssignmentsRoute,
+} as any)
+const AssignmentsCreateRoute = AssignmentsCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
+  getParentRoute: () => AssignmentsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/assignments': typeof AssignmentsRouteWithChildren
+  '/assignments/create': typeof AssignmentsCreateRoute
+  '/assignments/output': typeof AssignmentsOutputRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/assignments': typeof AssignmentsRouteWithChildren
+  '/assignments/create': typeof AssignmentsCreateRoute
+  '/assignments/output': typeof AssignmentsOutputRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/assignments': typeof AssignmentsRouteWithChildren
+  '/assignments/create': typeof AssignmentsCreateRoute
+  '/assignments/output': typeof AssignmentsOutputRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/assignments'
+    | '/assignments/create'
+    | '/assignments/output'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/assignments' | '/assignments/create' | '/assignments/output'
+  id:
+    | '__root__'
+    | '/'
+    | '/assignments'
+    | '/assignments/create'
+    | '/assignments/output'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AssignmentsRoute: typeof AssignmentsRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/assignments': {
+      id: '/assignments'
+      path: '/assignments'
+      fullPath: '/assignments'
+      preLoaderRoute: typeof AssignmentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,22 +92,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/assignments/output': {
+      id: '/assignments/output'
+      path: '/output'
+      fullPath: '/assignments/output'
+      preLoaderRoute: typeof AssignmentsOutputRouteImport
+      parentRoute: typeof AssignmentsRoute
+    }
+    '/assignments/create': {
+      id: '/assignments/create'
+      path: '/create'
+      fullPath: '/assignments/create'
+      preLoaderRoute: typeof AssignmentsCreateRouteImport
+      parentRoute: typeof AssignmentsRoute
+    }
   }
 }
 
+interface AssignmentsRouteChildren {
+  AssignmentsCreateRoute: typeof AssignmentsCreateRoute
+  AssignmentsOutputRoute: typeof AssignmentsOutputRoute
+}
+
+const AssignmentsRouteChildren: AssignmentsRouteChildren = {
+  AssignmentsCreateRoute: AssignmentsCreateRoute,
+  AssignmentsOutputRoute: AssignmentsOutputRoute,
+}
+
+const AssignmentsRouteWithChildren = AssignmentsRoute._addFileChildren(
+  AssignmentsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AssignmentsRoute: AssignmentsRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
