@@ -5,9 +5,6 @@ import { useRouter } from "next/navigation";
 import { UploadCloud, Calendar, Plus, Mic, Loader2 } from "lucide-react";
 import { useAssignmentStore } from "@/store/use-assignment-store";
 import { QuestionRowItem } from "@/components/assignment/question-row";
-import axios from "axios";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 export default function CreateAssignmentPage() {
   const router = useRouter();
@@ -27,20 +24,29 @@ export default function CreateAssignmentPage() {
 
     try {
       setIsSubmitting(true);
-      const formData = new FormData();
-      formData.append("title", title);
-      formData.append("dueDate", dueDate);
-      formData.append("instructions", instructions);
-      formData.append("totalQuestions", totalQuestions().toString());
-      formData.append("totalMarks", totalMarks().toString());
-      formData.append("questionTypes", JSON.stringify(rows));
-      if (file) {
-        formData.append("file", file);
+      
+      const payload = {
+        title,
+        dueDate,
+        instructions,
+        totalQuestions: totalQuestions(),
+        totalMarks: totalMarks(),
+        questionTypes: rows
+      };
+
+      const response = await fetch('/api/assignments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create assignment');
       }
 
-      const { data } = await axios.post(`${API_URL}/assignments`, formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
+      const data = await response.json();
 
       setCurrentAssignmentId(data.assignmentId);
       router.push(`/assignments/output?id=${data.assignmentId}`);
@@ -99,7 +105,7 @@ export default function CreateAssignmentPage() {
                 <UploadCloud className="h-8 w-8 text-brand" />
               </div>
               <p className="text-base font-bold text-foreground">
-                {file ? file.name : "Upload material"}
+                {file ? file.name : "Upload material (Not Supported in Demo)"}
               </p>
               <p className="mt-1 text-xs text-muted-foreground font-medium">
                 {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "JPEG, PNG, PDF up to 10MB"}

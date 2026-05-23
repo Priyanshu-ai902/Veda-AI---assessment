@@ -46,4 +46,4 @@ const GeneratedPaperSchema = new Schema<IGeneratedPaper>({
   pdfUrl: { type: String },
 }, { timestamps: true });
 
-export const GeneratedPaper = mongoose.model<IGeneratedPaper>('GeneratedPaper', GeneratedPaperSchema);
+export const GeneratedPaper = mongoose.models.GeneratedPaper || mongoose.model<IGeneratedPaper>('GeneratedPaper', GeneratedPaperSchema);

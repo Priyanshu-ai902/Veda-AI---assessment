@@ -2,7 +2,6 @@ import { Groq } from 'groq-sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { z } from 'zod';
 
-// Schema Validation
 export const QuestionSchema = z.object({
   question: z.string().min(5),
   difficulty: z.enum(['Easy', 'Moderate', 'Challenging']),
@@ -25,27 +24,18 @@ export const PaperSchema = z.object({
 
 export type GeneratedPaperData = z.infer<typeof PaperSchema>;
 
-// Clients
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const getGroqClient = () => new Groq({ apiKey: process.env.GROQ_API_KEY });
+const getGenAIClient = () => new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-/**
- * Clean and repair AI response strings to extract valid JSON
- */
 function extractJSON(text: string): any {
   try {
-    // 1. Remove markdown code blocks
     let cleaned = text.replace(/```json\n?|```/g, '').trim();
-    
-    // 2. Find the first '{' and last '}'
     const start = cleaned.indexOf('{');
     const end = cleaned.lastIndexOf('}');
     
     if (start === -1 || end === -1) throw new Error('No JSON object found');
     
     cleaned = cleaned.substring(start, end + 1);
-    
-    // 3. Basic parse
     return JSON.parse(cleaned);
   } catch (err) {
     console.error('JSON Extraction/Parse failed:', err);
@@ -54,6 +44,7 @@ function extractJSON(text: string): any {
 }
 
 async function callGroq(prompt: string): Promise<any> {
+  const groq = getGroqClient();
   const completion = await groq.chat.completions.create({
     messages: [{ role: 'user', content: prompt }],
     model: 'llama-3.3-70b-versatile',
@@ -64,15 +55,13 @@ async function callGroq(prompt: string): Promise<any> {
 }
 
 async function callGemini(prompt: string): Promise<any> {
+  const genAI = getGenAIClient();
   const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
   const result = await model.generateContent(prompt);
   const response = await result.response;
   return extractJSON(response.text());
 }
 
-/**
- * Main AI Generation Service with Provider Fallback & Retry Logic
- */
 export const generateQuestionPaper = async (promptData: any): Promise<GeneratedPaperData> => {
   const prompt = `
 Generate a professional, academic question paper strictly in JSON format.
@@ -110,33 +99,27 @@ Rules:
 
   for (const provider of providers) {
     let retries = 0;
-    const maxRetries = 3;
+    const maxRetries = 2;
 
     while (retries < maxRetries) {
       try {
         console.log(`[AI] Attempting ${provider.name} (Retry: ${retries})`);
         const rawResult = await provider.fn(prompt);
-        
-        // Zod Validation
         const validated = PaperSchema.parse(rawResult);
         console.log(`[AI] ${provider.name} Successful`);
         return validated;
-        
       } catch (error) {
         retries++;
         console.error(`[AI] ${provider.name} failed:`, (error as Error).message);
-        
         if (retries >= maxRetries) {
-          console.warn(`[AI] ${provider.name} exhausted retries. Falling back to next provider.`);
+          console.warn(`[AI] ${provider.name} exhausted retries.`);
         } else {
-          // Exponential backoff
-          await new Promise(res => setTimeout(res, 1000 * Math.pow(2, retries)));
+          await new Promise(res => setTimeout(res, 500 * Math.pow(2, retries)));
         }
       }
     }
   }
 
-  // Final Fallback: Mock Data
   console.warn('[AI] All providers failed. Using mock fallback.');
   return {
     title: promptData.title,

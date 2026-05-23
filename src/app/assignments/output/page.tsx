@@ -3,13 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Download, Plus, Loader2 } from "lucide-react";
-import io from "socket.io-client";
-import axios from "axios";
 import { toast } from "sonner";
-
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-
 import { AssignmentPreview } from "@/components/assignment/assignment-preview";
 
 function OutputContent() {
@@ -17,69 +11,41 @@ function OutputContent() {
   const id = searchParams.get("id");
 
   const [paper, setPaper] = useState<any>(null);
-  const [status, setStatus] = useState("idle");
-  const [progress, setProgress] = useState(0);
-  const [message, setMessage] = useState("Initializing...");
+  const [status, setStatus] = useState("loading");
   const [error, setError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     if (!id) return;
 
-    const checkExisting = async () => {
+    const fetchResult = async () => {
       try {
-        const { data: assignment } = await axios.get(`${API_URL}/assignments/${id}`);
+        const assignmentRes = await fetch(`/api/assignments/${id}`);
+        if (!assignmentRes.ok) throw new Error("Assignment not found");
+        const assignment = await assignmentRes.json();
+
         if (assignment.status === 'completed') {
-          const { data: paperData } = await axios.get(`${API_URL}/assignments/${id}/output`);
+          const paperRes = await fetch(`/api/assignments/${id}/output`);
+          if (!paperRes.ok) throw new Error("Paper not found");
+          const paperData = await paperRes.json();
           setPaper(paperData);
           setStatus("completed");
         } else if (assignment.status === 'failed') {
           setStatus("failed");
           setError("Generation failed previously.");
         } else {
-          setStatus(assignment.status);
-          setupSocket();
+          // It's still processing. Since it's serverless, we might just poll a few times
+          setStatus("processing");
+          setTimeout(fetchResult, 3000); // Poll every 3 seconds just in case
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
+        setStatus("failed");
+        setError(err.message || "Failed to load generation result.");
       }
     };
 
-    const setupSocket = () => {
-      const socket = io(SOCKET_URL);
-      
-      socket.on("connect", () => {
-        socket.emit("join_assignment", id);
-      });
-
-      socket.on("generation:progress", (data) => {
-        setStatus(data.status);
-        setProgress(data.progress);
-        setMessage(data.message);
-      });
-
-      socket.on("generation:completed", async (data) => {
-        setStatus("completed");
-        setProgress(100);
-        try {
-          const { data: paperData } = await axios.get(`${API_URL}/assignments/${id}/output`);
-          setPaper(paperData);
-        } catch (err) {
-          console.error("Failed to fetch generated paper after completion", err);
-        }
-      });
-
-      socket.on("generation:failed", (data) => {
-        setStatus("failed");
-        setError(data.error || data.message);
-      });
-
-      return () => {
-        socket.disconnect();
-      };
-    };
-
-    checkExisting();
+    fetchResult();
 
   }, [id]);
 
@@ -90,24 +56,17 @@ function OutputContent() {
       setIsDownloading(true);
       toast.info("Preparing your PDF...");
       
-      const downloadUrl = `${API_URL}/assignments/pdf/${paper._id}`;
-      
-      // Using axios to fetch as blob to ensure we handle errors correctly
-      const response = await axios({
-        url: downloadUrl,
-        method: 'GET',
-        responseType: 'blob',
-      });
+      const response = await fetch(`/api/assignments/pdf/${paper._id}`);
+      if (!response.ok) throw new Error("Failed to generate PDF");
 
-      // Create a link element, hide it, and click it to trigger download
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `assignment_${paper._id}.pdf`);
       document.body.appendChild(link);
       link.click();
       
-      // Cleanup
       link.parentNode?.removeChild(link);
       window.URL.revokeObjectURL(url);
       
@@ -143,10 +102,8 @@ function OutputContent() {
     return (
       <div className="p-8 flex flex-col items-center justify-center min-h-[60vh]">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <h2 className="text-xl font-semibold mb-2">{message}</h2>
-        <div className="w-full max-w-md bg-secondary rounded-full h-2.5 overflow-hidden">
-          <div className="bg-brand h-2.5 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
-        </div>
+        <h2 className="text-xl font-semibold mb-2">Fetching your generation...</h2>
+        <p className="text-muted-foreground">Please wait a moment while we retrieve the AI generated assignment.</p>
       </div>
     );
   }

@@ -4,9 +4,6 @@ import Link from "next/link";
 import { Search, SlidersHorizontal, Plus, Loader2, FileText } from "lucide-react";
 import { AssignmentCard } from "@/components/assignment/assignment-card";
 import { useEffect, useState } from "react";
-import axios from "axios";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -15,8 +12,11 @@ export default function AssignmentsPage() {
   useEffect(() => {
     const fetchAssignments = async () => {
       try {
-        const { data } = await axios.get(`${API_URL}/assignments`);
-        setAssignments(data);
+        const response = await fetch('/api/assignments');
+        if (response.ok) {
+          const data = await response.json();
+          setAssignments(data);
+        }
       } catch (error) {
         console.error('Failed to fetch assignments:', error);
       } finally {

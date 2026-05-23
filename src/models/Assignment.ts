@@ -36,4 +36,5 @@ const AssignmentSchema = new Schema<IAssignment>({
   totalQuestions: { type: Number, required: true },
 }, { timestamps: true });
 
-export const Assignment = mongoose.model<IAssignment>('Assignment', AssignmentSchema);
+// Prevent mongoose from recompiling the model upon hot reload
+export const Assignment = mongoose.models.Assignment || mongoose.model<IAssignment>('Assignment', AssignmentSchema);
