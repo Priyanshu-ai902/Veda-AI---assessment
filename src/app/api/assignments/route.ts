@@ -4,6 +4,8 @@ import { Assignment } from '@/models/Assignment';
 import { GeneratedPaper } from '@/models/GeneratedPaper';
 import { generateQuestionPaper } from '@/services/aiService';
 
+export const maxDuration = 60; // Set timeout to 60 seconds for AI generation
+
 export async function GET() {
   try {
     await dbConnect();

@@ -3,6 +3,8 @@ import dbConnect from '@/lib/mongodb';
 import { GeneratedPaper } from '@/models/GeneratedPaper';
 import { generatePDF } from '@/services/pdfService';
 
+export const maxDuration = 60; // Set timeout to 60 seconds for PDF generation
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await dbConnect();
